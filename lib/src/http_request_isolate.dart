@@ -1,16 +1,22 @@
 import 'package:gl_functional/gl_functional.dart';
-import 'package:meta/meta.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:isolates/src/isolate.dart';
 
 String _getRequest (IsolateParameter<Map<String, dynamic>> requestParam) {  
   final uriOrUrl = requestParam.param['uriOrUrl'];
-  
-  http.get (uriOrUrl, headers: requestParam.param['headers'])
+  Uri uri;
+  if (uriOrUrl is String)
+  {
+    uri = Uri.parse(uriOrUrl);
+  }
+  else
+    uri = uriOrUrl as Uri;
+
+  http.get (uri, headers: requestParam.param['headers'])
       .then((response) {
         if (response.statusCode == 200) {
-          requestParam.sendPort.send(utf8.decode(response.bodyBytes));
+          requestParam.sendPort?.send(utf8.decode(response.bodyBytes));
         } else {
           throw BadResponseException(response.statusCode);
         }      
@@ -22,7 +28,13 @@ String _getRequest (IsolateParameter<Map<String, dynamic>> requestParam) {
 dynamic _jsonDecode(IsolateParameter<String> responseStringParam)
 {
   final jsonRes = json.decode(responseStringParam.param);
-  responseStringParam.sendPort.send(jsonRes);
+  responseStringParam.sendPort?.send(jsonRes);
+}
+
+dynamic _jsonEncode(IsolateParameter<String> jsonToEncode)
+{
+  final jsonRes = json.encode(jsonToEncode);
+  jsonToEncode.sendPort?.send(jsonRes);
 }
 
 /// Classe di base di una HttpRequest.
@@ -38,10 +50,10 @@ abstract class HttpIsolateRequestFactory {
   }
 
   static Uri _getUriFrom(
-      {String authority,
-      String unencodedPath,
-      Map<String, String> queryParams,
-      bool isHttps}) {
+      {String authority = '',
+      String unencodedPath = '',
+      Map<String, String> queryParams = const {},
+      bool isHttps = true}) {
       _debugCheckAuthorityFormat(authority);
 
     return isHttps
@@ -50,7 +62,7 @@ abstract class HttpIsolateRequestFactory {
   }
 
   static IsolateManager<Map<String, dynamic>, String> fromUriForRss(
-      {@required String authority,
+      {required String authority,
       String unencodedPath: '',
       Duration timeout: const Duration(seconds:30),
       bool isHttps : true,
@@ -65,7 +77,7 @@ abstract class HttpIsolateRequestFactory {
   }
 
   static IsolateManager<Map<String, dynamic>, String> fromUriForJson(
-      {@required String authority,
+      {required String authority,
       String unencodedPath: '',
       Duration timeout: const Duration(seconds:30),
       bool isHttps : true,
@@ -80,7 +92,7 @@ abstract class HttpIsolateRequestFactory {
   }
 
   static IsolateManager<Map<String, dynamic>, String> fromUri(
-      {@required String authority,
+      {required String authority,
       String unencodedPath: '',
       Duration timeout: const Duration(seconds:30),
       Map<String, String> headers: const <String, String>{},
@@ -109,9 +121,11 @@ abstract class HttpIsolateRequestFactory {
   }
 
   static Future<Validation> toJsonIsolate(String response) => IsolateManager.prepare(response, isolateEntryPoint: _jsonDecode).start();
+  static Future<Validation> encodeJson(String response) => IsolateManager.prepare(response, isolateEntryPoint: _jsonEncode).start();
 }
 
 extension Decoders on String {
-  Future<Validation<T>> toJsonIsolate<T> () => IsolateManager.prepare(this, isolateEntryPoint: _jsonDecode).start();
+  Future<Validation<T>> toJsonIsolate<T> () => IsolateManager.prepare(this, isolateEntryPoint: _jsonDecode).start() as Future<Validation<T>>;
+  Future<Validation<T>> decodeJsonInIsolate<T> () => IsolateManager.prepare(this, isolateEntryPoint: _jsonEncode).start() as Future<Validation<T>>;
 }
 

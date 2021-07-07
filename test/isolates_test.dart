@@ -7,7 +7,7 @@ import 'package:gl_functional/gl_functional.dart';
 
 String _isolateFunction (IsolateParameter<int> param)
 {
-  param.sendPort.send('Hi ${param.param}, Hello from isolate!');
+  param.sendPort?.send('Hi ${param.param}, Hello from isolate!');
   return '';
 }
 

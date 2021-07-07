@@ -1,0 +1,15 @@
+{    
+    "dart.lineLength": 110,
+    "editor.formatOnSave": false,
+    "editor.formatOnType": false,
+    "[dart]" : {
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false,
+        "editor.rulers": [110]        
+    },
+    "[json]" : {
+        "editor.rulers": [110],
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false,
+    }
+}

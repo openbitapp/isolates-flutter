@@ -10,25 +10,20 @@ import 'package:flutter/material.dart';
 class IsolateParameter<T> {
   /// `SendPort` è il canale che utilizzerà la funzione nell'isolate per comunicare il risultato
   /// `SendPort` è un field della ReceivePort instanziata nella classe `IsolateHelper`.
-  SendPort sendPort;
+  SendPort? sendPort;
 
-  /// Non so se sia il caso di utilizzare un timeout direttamente nell'isolate.
-  /// Per ora utilizzo un timeout sul future e quando scade eseguo un `kill`
-  Option<Duration> timeout;
   final T param;
-  IsolateParameter(this.param, {Option<Duration> timeout})
-      : timeout = timeout ?? None();
+  IsolateParameter(this.param);
 
   /// Costruttore privato che mi serve perché, visto che l'`IsolatePatameter` viene passato dall'esterno
   /// e che la SendPort viene fornita dall'`IsolateHelper`, non è possibile costruirlo in un solo passo
   /// (i.e. dall'esterno). Quindi quando l'`IsolateHelper` eseguirà uno spawn, utilizzerà la `_setPort` che a sua
   /// volta costruisce un nuovo `IsolateParameter` con la `SendPort`
-  IsolateParameter._(this.param, {@required SendPort sendPort, this.timeout})
-      : sendPort = sendPort;
+  IsolateParameter._(this.param, {required SendPort sendPort}) : sendPort = sendPort;
 
   /// Utilizzata dall'`IsolateHelper` per costruire il parametro con la `SendPort`
   IsolateParameter<T> _setPort(SendPort sendPort) =>
-      IsolateParameter._(param, sendPort: sendPort, timeout: timeout);
+      IsolateParameter._(param, sendPort: sendPort);
 }
 
 /// Stati dell'isolate. Parte in `ready` (stato a cui non ritorna)
@@ -43,12 +38,12 @@ class IsolateHelper<T, R> {
 
   final _receivePort = ReceivePort();
   final _errorPort = ReceivePort();
-  Future<Isolate> _isolate;
+  Future<Isolate>? _isolate;
   IsolateState _state = IsolateState.ready;
   IsolateState get state => _state;
 
   /// Serve per tipizzare automaticamente l'IsolateHelper restituito.
-  /// Nehli Isolate la funzione solitamente restituisce un void ma qui, per tipizzarlo è
+  /// Negli Isolate la funzione solitamente restituisce un void ma qui, per tipizzarlo è
   /// necessario che la funzione restituisca il tipo di dato che l'entryPoint scrivera nella SendPort
   /// Il risultato restituito non verrà usato: serve solo per tipizzare!
   static IsolateHelper<T, R> spawn<T, R> (R Function(IsolateParameter<T>) entryPoint, IsolateParameter<T> parameter)
@@ -103,10 +98,10 @@ class IsolateHelper<T, R> {
             _close();
           });
 
-          final i = await _isolate;
+          final i = await _isolate!;
           // Dobbiamo far partire l'Isolate che è stato creato in pausa per permettere
           // di ascoltare risultato e errori prima che si completi
-          i.resume(i.pauseCapability);
+          i.resume(i.pauseCapability!);
           // Il completer verrà completato nelle listen della _receivePort o della _errorPort
           return _completer.future;
       });
@@ -150,7 +145,7 @@ class IsolateHelper<T, R> {
     _completer.complete(KilledError().toInvalid<R>());
     
     _close();
-    final i = await _isolate;
+    final i = await _isolate!;
     i.kill(priority: Isolate.immediate);
   }
 
@@ -163,7 +158,7 @@ class IsolateHelper<T, R> {
 class ErrorWithMessage extends Error{
   final Option<String> message;
 
-  ErrorWithMessage([String message]) : message = message == null ? None<String>() : Some(message);
+  ErrorWithMessage([String? message]) : message = message == null ? None<String>() : Some(message);
 
   @override
   String toString() => message.getOrElse('Error');
@@ -171,7 +166,7 @@ class ErrorWithMessage extends Error{
 
 class AlreadyListeningError extends ErrorWithMessage
 {
-  AlreadyListeningError([String message]) : super (message);
+  AlreadyListeningError([String? message]) : super (message);
 
   @override
   String toString() => message.getOrElse('Already listening');
@@ -179,7 +174,7 @@ class AlreadyListeningError extends ErrorWithMessage
 
 class AlreadyListenedError extends ErrorWithMessage
 {
-  AlreadyListenedError([String message]) : super (message);
+  AlreadyListenedError([String? message]) : super (message);
 
   @override
   String toString() => message.getOrElse('Already listened');
@@ -187,7 +182,7 @@ class AlreadyListenedError extends ErrorWithMessage
 
 class KilledError extends ErrorWithMessage
 {
-  KilledError([String message]) : super (message);
+  KilledError([String? message]) : super (message);
 
   @override
   String toString() => message.getOrElse('Killed');
@@ -198,7 +193,7 @@ class IsolateManager<T, R> {
   final IsolateHelper<T, R> _iHelper;
 
   IsolateManager._(this._iHelper, {Duration timeout: const Duration(seconds: 30)}) : _timeout = timeout;
-  static IsolateManager<T, R> prepare<T, R> (T isolateInput, { @required R Function(IsolateParameter<T>) isolateEntryPoint, 
+  static IsolateManager<T, R> prepare<T, R> (T isolateInput, { required R Function(IsolateParameter<T>) isolateEntryPoint, 
                                     Duration timeout: const Duration(seconds: 30)})
   {
     final isolateParam = IsolateParameter (isolateInput);
@@ -223,9 +218,7 @@ class IsolateManager<T, R> {
                   .then((result) async {
                       await _iHelper.kill();
                       return result;
-                  }
-                    
-                  );                
+                  });                
   }
 
   bool get isEnded => _iHelper.isEnded;

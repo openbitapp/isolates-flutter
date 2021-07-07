@@ -5,7 +5,7 @@ author:
 homepage:
 
 environment:
-  sdk: ">=2.7.0 <3.0.0"
+  sdk: ">=2.12.0 <3.0.0"
   flutter: ">=1.17.0"
 
 publish_to: none
@@ -13,10 +13,10 @@ publish_to: none
 dependencies:
   flutter:
     sdk: flutter
-  webfeed: ^0.6.0
-  http: ^0.12.2
+  webfeed: ^0.7.0
+  http: ^0.13.3
   gl_functional:
-    path: ../../gl_functional
+    path: ../gl_functional-flutter
 
 dev_dependencies:
   flutter_test:
