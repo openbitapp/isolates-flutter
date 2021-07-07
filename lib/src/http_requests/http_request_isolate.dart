@@ -1,17 +1,12 @@
 import 'package:gl_functional/gl_functional.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:isolates/src/http_requests/request_methods.dart';
 import 'package:isolates/src/isolate.dart';
 
 String _getRequest (IsolateParameter<Map<String, dynamic>> requestParam) {  
   final uriOrUrl = requestParam.param['uriOrUrl'];
-  Uri uri;
-  if (uriOrUrl is String)
-  {
-    uri = Uri.parse(uriOrUrl);
-  }
-  else
-    uri = uriOrUrl as Uri;
+  final uri = _getUri(uriOrUrl);
 
   http.get (uri, headers: requestParam.param['headers'])
       .then((response) {
@@ -23,6 +18,35 @@ String _getRequest (IsolateParameter<Map<String, dynamic>> requestParam) {
       });
 
   return '';
+}
+
+String _postRequest (IsolateParameter<Map<String, dynamic>> requestParam) {  
+  final uriOrUrl = requestParam.param['uriOrUrl'];
+  final uri = _getUri(uriOrUrl);
+
+  http.post(uri, headers: requestParam.param['headers'], body: requestParam.param['jsonBody'])
+      .then((response) {
+        if (response.statusCode == 200) {
+          requestParam.sendPort?.send(utf8.decode(response.bodyBytes));
+        } else {
+          throw BadResponseException(response.statusCode);
+        }      
+      });
+
+  return '';
+}
+
+Uri _getUri(dynamic uriOrUrl)
+{
+  Uri uri;
+  if (uriOrUrl is String)
+  {
+    uri = Uri.parse(uriOrUrl);
+  }
+  else
+    uri = uriOrUrl as Uri;
+
+    return uri;
 }
 
 dynamic _jsonDecode(IsolateParameter<String> responseStringParam)
@@ -73,7 +97,7 @@ abstract class HttpIsolateRequestFactory {
         'application/rss+xml, application/rdf+xml;q=0.8, application/atom+xml;q=0.6, application/xml;q=0.4, text/xml;q=0.4'
       };
 
-    return fromUri(authority: authority, unencodedPath: unencodedPath, timeout: timeout, headers: headers, isHttps: isHttps, queryParams: queryParams);
+    return fromUri(authority: authority, unencodedPath: unencodedPath, timeout: timeout, additionalHeaders: headers, isHttps: isHttps, queryParams: queryParams);
   }
 
   static IsolateManager<Map<String, dynamic>, String> fromUriForJson(
@@ -81,23 +105,25 @@ abstract class HttpIsolateRequestFactory {
       String unencodedPath: '',
       Duration timeout: const Duration(seconds:30),
       bool isHttps : true,
-      Map<String, String> queryParams: const <String, String>{}}) 
+      Map<String, String> queryParams: const {}}) 
   {
     final headers = const {
         'Accept':
         'application/json'
       };
 
-    return fromUri(authority: authority, unencodedPath: unencodedPath, timeout: timeout, headers: headers, isHttps: isHttps, queryParams: queryParams);
+    return fromUri(authority: authority, unencodedPath: unencodedPath, timeout: timeout, additionalHeaders: headers, isHttps: isHttps, queryParams: queryParams);
   }
 
   static IsolateManager<Map<String, dynamic>, String> fromUri(
       {required String authority,
       String unencodedPath: '',
+      RequestMethod requestMethod = RequestMethod.get,
       Duration timeout: const Duration(seconds:30),
-      Map<String, String> headers: const <String, String>{},
+      Map<String, String> additionalHeaders: const {},
       bool isHttps : true,
-      Map<String, String> queryParams: const <String, String>{}}) {
+      Map<String, String> queryParams: const {},
+      Map<String, dynamic>? jsonBody}) {
     {
       final uri = _getUriFrom(
                   authority: authority,
@@ -105,7 +131,18 @@ abstract class HttpIsolateRequestFactory {
                   queryParams: queryParams,
                   isHttps: isHttps);
 
-      return _prepareRequest(uri, headers: headers, timeout:timeout);
+      var headers = {
+        'Accept':
+        'application/json'
+      };
+
+      if (requestMethod == RequestMethod.post)
+      {
+        headers = {'Content-Type': 'application/json; charset=UTF-8'};
+      }
+
+      headers.addAll(additionalHeaders);
+      return _prepareRequest(uri, requestMethod: requestMethod, headers: headers, jsonBody: jsonBody, timeout:timeout);
     }
   }
 
@@ -113,11 +150,25 @@ abstract class HttpIsolateRequestFactory {
     return _prepareRequest(url, timeout: timeout);
   }
 
-  static IsolateManager<Map<String, dynamic>, String> _prepareRequest<T>(T uriOrUrl, 
-                                            {Map<String, String> headers: const <String, String>{}, 
-                                            Duration timeout:const Duration(seconds:30)}) 
+  static IsolateManager<Map<String, dynamic>, String> _prepareRequest<T>(T uriOrUrl,               
+                                                                        {RequestMethod requestMethod = RequestMethod.get,
+                                                                          Map<String, String> headers: const <String, String>{}, 
+                                                                          Duration timeout:const Duration(seconds:30),
+                                                                          Map<String, dynamic>? jsonBody}) 
   {
-    return IsolateManager.prepare({'uriOrUrl': uriOrUrl, 'headers': headers}, isolateEntryPoint: _getRequest, timeout: timeout);
+    var isolateParams = {'uriOrUrl': uriOrUrl, 'headers': headers};
+    if (jsonBody != null)    
+    {
+      isolateParams['jsonBody'] = json.encode(jsonBody);
+    }
+
+    var entryPoint = _getRequest;
+    if (requestMethod == RequestMethod.post)
+    {
+      entryPoint = _postRequest;
+    }
+
+    return IsolateManager.prepare(isolateParams, isolateEntryPoint: entryPoint, timeout: timeout);    
   }
 
   static Future<Validation> toJsonIsolate(String response) => IsolateManager.prepare(response, isolateEntryPoint: _jsonDecode).start();

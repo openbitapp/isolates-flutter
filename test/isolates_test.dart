@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:isolates/isolates.dart';
 import 'package:gl_functional/gl_functional.dart';
+import 'package:isolates/src/http_requests/request_methods.dart';
 
 String _isolateFunction (IsolateParameter<int> param)
 {
@@ -14,13 +15,11 @@ String _isolateFunction (IsolateParameter<int> param)
 String _isolateFunctionInError (IsolateParameter<int> param)
 {
   throw ArgumentError('Invalid int');
-  return '';
 }
 
 String _isolateFunctionInException (IsolateParameter<int> param)
 {
   throw Exception('Invalid int');
-  return '';
 }
 
 String _isolateFunctionVeryLong (IsolateParameter<int> param)
@@ -115,5 +114,21 @@ void main() {
                              .fold<void, List>(
                                (failures) => null, 
                                   (val) => print (val[0]['api_name']));
+
+    await HttpIsolateRequestFactory.fromUri(authority: 'dev-api.campusonline.website', unencodedPath: 'login', requestMethod: RequestMethod.post)
+                             .start()
+                             .fold((failures) => 
+                                      failures.first.fold(() => fail('expect exception'), 
+                                                          (err) => fail('expect exception'), 
+                                                          (exc) => expect(401, (exc as BadResponseException).statusCode)), 
+                                  (val) => fail('expect exception'));
+
+    await HttpIsolateRequestFactory.fromUri(authority: 'dev-api.campusonline.website', unencodedPath: 'login', requestMethod: RequestMethod.post)
+                             .start()
+                             .fold((failures) => 
+                                      failures.first.fold(() => fail('expect exception'), 
+                                                          (err) => fail('expect exception'), 
+                                                          (exc) => expect(401, (exc as BadResponseException).statusCode)), 
+                                  (val) => fail('expect exception'));
   });
 }

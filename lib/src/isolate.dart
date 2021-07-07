@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:gl_functional/gl_functional.dart';
-import 'package:flutter/material.dart';
 
 /// Classe da passare nell'isolate come parametro. Se si vogliono passare più parametri è necessario specificare
 /// un `Map` come `T`
@@ -116,7 +115,7 @@ class IsolateHelper<T, R> {
       return TimeoutException(error).toFail();
     }
 
-    if (error.startsWith('BadResponseException')) {
+    if (error.startsWith('Bad response')) {
       return BadResponseException.fromString(error).toFail();
     }
 
