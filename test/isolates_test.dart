@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:isolates/isolates.dart';
 import 'package:gl_functional/gl_functional.dart';
-import 'package:isolates/src/http_requests/request_methods.dart';
 
 String _isolateFunction (IsolateParameter<int> param)
 {
@@ -35,39 +34,39 @@ String _isolateFunctionVeryLong (IsolateParameter<int> param)
 void main() {
   test('TEST: IsolateHelper ', () async {
     final intP = 10;
-    final ih = IsolateHelper.spawn(_isolateFunction, IsolateParameter(intP));
+    final ih = IsolateHelper.spawn(_isolateFunction, IsolateParameter(intP), customMessageToError: (e) => None());
     await ih.listen()
             .fold<void, String>((failures) => fail('Error not expected'), 
                           (val) => expect(val, 'Hi $intP, Hello from isolate!'));
 
     expect(ih.state, IsolateState.completed);
 
-    final ihe = IsolateHelper.spawn(_isolateFunctionInError, IsolateParameter(intP));
+    final ihe = IsolateHelper.spawn(_isolateFunctionInError, IsolateParameter(intP), customMessageToError: (e) => None());
     await ihe.listen()
             .fold<void, String>((failures) => failures.first
-                                                      .fold(() => fail('Error expected'), 
+                                                      .fold( 
                                                             (err) => expect(err, isA<Error>()), 
                                                             (exc) => fail('Error expected')),
                           (val) => fail('Error expected'));
 
     expect(ih.state, IsolateState.completed);
 
-    final ihex = IsolateHelper.spawn(_isolateFunctionInException, IsolateParameter(intP));
+    final ihex = IsolateHelper.spawn(_isolateFunctionInException, IsolateParameter(intP), customMessageToError: (e) => None());
     await ihex.listen()
             .fold<void, String>((failures) => failures.first
-                                                      .fold(() => fail('Error expected'), 
+                                                      .fold(
                                                             (err) => fail('Exception expected'), 
                                                             (exc) => expect(exc, isA<Exception>())),
                           (val) => fail('Error expected'));
 
-    final ihVeryLong = IsolateHelper.spawn(_isolateFunctionVeryLong, IsolateParameter(200000));
+    final ihVeryLong = IsolateHelper.spawn(_isolateFunctionVeryLong, IsolateParameter(200000), customMessageToError: (e) => None());
     expect(ihVeryLong.state, IsolateState.ready);
 
     ihVeryLong.listen();
     expect(ihVeryLong.state, IsolateState.running);
 
     await ihVeryLong.listen().fold((failures) => failures.first
-                                                    .fold(() => fail('Error expected'), 
+                                                    .fold(
                                                           (err) => expect(err, isA<AlreadyListeningError>()), 
                                                           (exc) => fail('Error expected')), 
                               (val) => fail('Error expected'));
@@ -77,58 +76,36 @@ void main() {
   });
 
   test('TEST: IsolateManager', () async {
-    final imVeryLong = IsolateManager.prepare(200000, isolateEntryPoint: _isolateFunctionVeryLong, timeout:Duration(milliseconds:1));
+    final imVeryLong = IsolateManager.prepare(200000, 
+                                              customMessageToError: (e) => None(),
+                                              isolateEntryPoint: _isolateFunctionVeryLong, 
+                                              timeout:Duration(milliseconds:1));
     await imVeryLong.start()
                     .fold((failures) => failures.first
-                                                  .fold(() => fail('Exception expected'), 
+                                                  .fold(
                                                             (err) => fail('Exception expected'), 
                                                             (exc) => expect(exc, isA<TimeoutException>())), 
                             (val) => fail('Error expected'));
 
     imVeryLong.start()                           
               .fold((failures) => failures.first
-                                          .fold(() => fail('Error expected'), 
+                                          .fold(
                                                     (err) => expect(err, isA<AlreadyListenedError>()), 
                                                     (exc) => fail('Error expected')), 
                             (val) => fail('Error expected'));
 
-    final imVeryLongII = IsolateManager.prepare(200000, isolateEntryPoint: _isolateFunctionVeryLong);
+    final imVeryLongII = IsolateManager.prepare(200000, isolateEntryPoint: _isolateFunctionVeryLong, customMessageToError: (e) => None());
     
     final fvlr = imVeryLongII.start();
     await imVeryLongII.cancel();
     await fvlr.fold((failures) => failures.first
-                                                  .fold(() => fail('Error expected'), 
+                                                  .fold(
                                                             (err) => expect(err, isA<KilledError>()), 
                                                             (exc) => fail('Error expected')), 
                             (val) => fail('Error expected'));
   });
 
   test('TEST: HttpIsolateRequest', () async {
-    await HttpIsolateRequestFactory.fromUrl('https://crossbrowsertesting.com/api/v3/livetests/browsers?format=json')
-                             .start()
-                             .fold((failures) => fail('ValueExpected'), (val) => print(val));
     
-    await HttpIsolateRequestFactory.fromUrl('https://crossbrowsertesting.com/api/v3/livetests/browsers?format=json')
-                             .start()
-                             .bindFuture(HttpIsolateRequestFactory.toJsonIsolate)
-                             .fold<void, List>(
-                               (failures) => null, 
-                                  (val) => print (val[0]['api_name']));
-
-    await HttpIsolateRequestFactory.fromUri(authority: 'dev-api.campusonline.website', unencodedPath: 'login', requestMethod: RequestMethod.post)
-                             .start()
-                             .fold((failures) => 
-                                      failures.first.fold(() => fail('expect exception'), 
-                                                          (err) => fail('expect exception'), 
-                                                          (exc) => expect(401, (exc as BadResponseException).statusCode)), 
-                                  (val) => fail('expect exception'));
-
-    await HttpIsolateRequestFactory.fromUri(authority: 'dev-api.campusonline.website', unencodedPath: 'login', requestMethod: RequestMethod.post)
-                             .start()
-                             .fold((failures) => 
-                                      failures.first.fold(() => fail('expect exception'), 
-                                                          (err) => fail('expect exception'), 
-                                                          (exc) => expect(401, (exc as BadResponseException).statusCode)), 
-                                  (val) => fail('expect exception'));
   });
 }

@@ -25,6 +25,8 @@ class IsolateParameter<T> {
       IsolateParameter._(param, sendPort: sendPort);
 }
 
+typedef Option<Fail> FromErrorMessage(String error);
+
 /// Stati dell'isolate. Parte in `ready` (stato a cui non ritorna)
 enum IsolateState { ready, running, killed, completed }
 
@@ -32,6 +34,7 @@ enum IsolateState { ready, running, killed, completed }
 /// **R** è il tipo di dato passato alla SenPort dalla funzione eseguita nell'isolate.
 /// Il tipo di dato deve essere un dato semplice e non complesso.
 class IsolateHelper<T, R> {
+  FromErrorMessage customMessageToError = (error) => None();  
   // Serve per trasformare le calback dei listen in un Future.
   final _completer = Completer<Validation<R>>();
 
@@ -45,24 +48,29 @@ class IsolateHelper<T, R> {
   /// Negli Isolate la funzione solitamente restituisce un void ma qui, per tipizzarlo è
   /// necessario che la funzione restituisca il tipo di dato che l'entryPoint scrivera nella SendPort
   /// Il risultato restituito non verrà usato: serve solo per tipizzare!
-  static IsolateHelper<T, R> spawn<T, R> (R Function(IsolateParameter<T>) entryPoint, IsolateParameter<T> parameter)
+  static IsolateHelper<T, R> spawn<T, R> (R Function(IsolateParameter<T>) entryPoint, 
+                                          IsolateParameter<T> parameter,
+                                          {required FromErrorMessage customMessageToError})
   {
-    return IsolateHelper<T, R>._spawn(entryPoint, parameter);
+    return IsolateHelper<T, R>._spawn(entryPoint, parameter, customMessageToError: customMessageToError);
   }
   /// Crea l'isolate in stato **paused**. Verrà riavviatonella `listen`
   /// Serve crearlo in pausa in modo che nella listen possiamo agganciarci alla receivePort
   /// e alla errorPort prima che l'isolate termini.
   IsolateHelper._spawn(R Function(IsolateParameter<T>) entryPoint,
-      IsolateParameter<T> parameter) {
+      IsolateParameter<T> parameter,
+      {required FromErrorMessage customMessageToError}) : customMessageToError = customMessageToError {
     _isolate = Isolate.spawn(
         entryPoint, parameter._setPort(_receivePort.sendPort),
         paused: true, onError: _errorPort.sendPort);
   }
 
+  /// Testa se l'isolate è terminato
   bool get isEnded =>
       _state == IsolateState.completed || _state == IsolateState.killed;
 
-  
+  /// Controlla se è possibile mettersi in ascolto dell'isolate.
+  /// Se qualcuno è già in ascolto oppure se ha terminato, ritorna un errore
   Validation<EmptyOption> checkState () {
     if (_state == IsolateState.running)
     {
@@ -75,7 +83,8 @@ class IsolateHelper<T, R> {
 
     return Valid (Empty);
   }
-  /// Fa partire l'siolate e intercetta la risposta o l'eventuale errore.
+
+  /// Fa partire l'isolate e intercetta la risposta o l'eventuale errore.
   Future<Validation<R>> listen() async {
     
     return checkState().fold(
@@ -106,35 +115,42 @@ class IsolateHelper<T, R> {
       });
   }
 
+  /// Ricostruisce l'eccezione o l'Error da un messaggio di errore.
+  /// Serve perché gli errori restituiti dall'isolate sono stringhe
   Fail fromErrorMessage(String error) {
-    if (error.startsWith('SocketException')) {
-      return SocketException(error).toFail();
-    }
+    return customMessageToError (error).fold(
+      () {
+        if (error.startsWith('SocketException')) {
+          return SocketException(error).toFail();
+        }
 
-    if (error.startsWith('Timeout')) {
-      return TimeoutException(error).toFail();
-    }
+        if (error.startsWith('Timeout')) {
+          return TimeoutException(error).toFail();
+        }
 
-    if (error.startsWith('Bad response')) {
-      return BadResponseException.fromString(error).toFail();
-    }
+        // if (error.startsWith('Bad response')) {
+        //   return BadResponseException.fromString(error).toFail();
+        // }
 
-    if (error.startsWith('FormatException')) {
-      return FormatException(error).toFail();
-    }
+        if (error.startsWith('FormatException')) {
+          return FormatException(error).toFail();
+        }
 
-    if (error.startsWith('HttpException')) {
-      return HttpException(error).toFail();
-    }
+        if (error.startsWith('HttpException')) {
+          return HttpException(error).toFail();
+        }
 
-    if (!error.contains('Exception'))
-    {
-      return Error().toFail();
-    }
+        if (!error.contains('Exception'))
+        {
+          return Error().toFail();
+        }
 
-    return Exception(error).toFail();
+        return Exception(error).toFail();
+      }, 
+      (some) => some);    
   }
 
+  /// Termina l'isolate
   Future<void> kill() async {
     if (isEnded)
       return;
@@ -148,6 +164,7 @@ class IsolateHelper<T, R> {
     i.kill(priority: Isolate.immediate);
   }
 
+  /// Chiude le porte dell'isolate (la receive e la error)
   void _close() {
     _receivePort.close();
     _errorPort.close();
@@ -187,20 +204,25 @@ class KilledError extends ErrorWithMessage
   String toString() => message.getOrElse('Killed');
 }
 
+/// Helper che semplifica la chiamata all'isolate manager
 class IsolateManager<T, R> {
   final Duration _timeout;
   final IsolateHelper<T, R> _iHelper;
 
   IsolateManager._(this._iHelper, {Duration timeout: const Duration(seconds: 30)}) : _timeout = timeout;
-  static IsolateManager<T, R> prepare<T, R> (T isolateInput, { required R Function(IsolateParameter<T>) isolateEntryPoint, 
-                                    Duration timeout: const Duration(seconds: 30)})
+
+  static IsolateManager<T, R> prepare<T, R> (T isolateInput, 
+                                            {required R Function(IsolateParameter<T>) isolateEntryPoint, 
+                                              required FromErrorMessage customMessageToError,
+                                              Duration timeout: const Duration(seconds: 30)})
   {
     final isolateParam = IsolateParameter (isolateInput);
-    final ih = IsolateHelper.spawn (isolateEntryPoint, isolateParam);
+    final ih = IsolateHelper.spawn (isolateEntryPoint, isolateParam, customMessageToError: customMessageToError);
 
     return IsolateManager._(ih, timeout: timeout);
   } 
 
+  /// Lancia l'isolate
   Future<Validation<R>> start() {
     return _iHelper.listen()
                   .timeout(_timeout)
@@ -222,5 +244,6 @@ class IsolateManager<T, R> {
 
   bool get isEnded => _iHelper.isEnded;
 
+  /// Termina l'isolate
   Future<void> cancel() async => await _iHelper.kill();
 }
