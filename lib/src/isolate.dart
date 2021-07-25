@@ -33,10 +33,10 @@ enum IsolateState { ready, running, killed, completed }
 /// **T** è il tipo di parametro passato nell'`IsolateParameter`.
 /// **R** è il tipo di dato passato alla SenPort dalla funzione eseguita nell'isolate.
 /// Il tipo di dato deve essere un dato semplice e non complesso.
-class IsolateHelper<T, R> {
+class IsolateHelper<T> {
   FromErrorMessage customMessageToError = (error) => None();  
   // Serve per trasformare le calback dei listen in un Future.
-  final _completer = Completer<Validation<R>>();
+  final _completer = Completer<Validation>();
 
   final _receivePort = ReceivePort();
   final _errorPort = ReceivePort();
@@ -48,16 +48,16 @@ class IsolateHelper<T, R> {
   /// Negli Isolate la funzione solitamente restituisce un void ma qui, per tipizzarlo è
   /// necessario che la funzione restituisca il tipo di dato che l'entryPoint scrivera nella SendPort
   /// Il risultato restituito non verrà usato: serve solo per tipizzare!
-  static IsolateHelper<T, R> spawn<T, R> (R Function(IsolateParameter<T>) entryPoint, 
+  static IsolateHelper<T> spawn<T> (void Function(IsolateParameter<T>) entryPoint, 
                                           IsolateParameter<T> parameter,
                                           {required FromErrorMessage customMessageToError})
   {
-    return IsolateHelper<T, R>._spawn(entryPoint, parameter, customMessageToError: customMessageToError);
+    return IsolateHelper<T>._spawn(entryPoint, parameter, customMessageToError: customMessageToError);
   }
   /// Crea l'isolate in stato **paused**. Verrà riavviatonella `listen`
   /// Serve crearlo in pausa in modo che nella listen possiamo agganciarci alla receivePort
   /// e alla errorPort prima che l'isolate termini.
-  IsolateHelper._spawn(R Function(IsolateParameter<T>) entryPoint,
+  IsolateHelper._spawn(void Function(IsolateParameter<T>) entryPoint,
       IsolateParameter<T> parameter,
       {required FromErrorMessage customMessageToError}) : customMessageToError = customMessageToError {
     _isolate = Isolate.spawn(
@@ -85,17 +85,17 @@ class IsolateHelper<T, R> {
   }
 
   /// Fa partire l'isolate e intercetta la risposta o l'eventuale errore.
-  Future<Validation<R>> listen() async {
+  Future<Validation> listen() async {
     
     return checkState().fold(
-      (failures) => failures.first.toInvalid<R>().toFuture(), 
+      (failures) => failures.first.toInvalid().toFuture(), 
       (val) async {
           _state = IsolateState.running;
 
           // Ci mettianmo in ascolto del risultato dell'isolate
           _receivePort.listen((message) {
             _state = IsolateState.completed;
-            _completer.complete(Valid<R>(message));
+            _completer.complete(Valid(message));
             _close();
           });
 
@@ -157,7 +157,7 @@ class IsolateHelper<T, R> {
 
     _state = IsolateState.killed;  
     // Completiamo il Future emesso dalla listen
-    _completer.complete(KilledError().toInvalid<R>());
+    _completer.complete(KilledError().toInvalid());
     
     _close();
     final i = await _isolate!;
@@ -205,14 +205,14 @@ class KilledError extends ErrorWithMessage
 }
 
 /// Helper che semplifica la chiamata all'isolate manager
-class IsolateManager<T, R> {
+class IsolateManager<T> {
   final Duration _timeout;
-  final IsolateHelper<T, R> _iHelper;
+  final IsolateHelper<T> _iHelper;
 
   IsolateManager._(this._iHelper, {Duration timeout: const Duration(seconds: 30)}) : _timeout = timeout;
 
-  static IsolateManager<T, R> prepare<T, R> (T isolateInput, 
-                                            {required R Function(IsolateParameter<T>) isolateEntryPoint, 
+  static IsolateManager<T> prepare<T> (T isolateInput, 
+                                            {required void Function(IsolateParameter<T>) isolateEntryPoint, 
                                               required FromErrorMessage customMessageToError,
                                               Duration timeout: const Duration(seconds: 30)})
   {
@@ -223,17 +223,17 @@ class IsolateManager<T, R> {
   } 
 
   /// Lancia l'isolate
-  Future<Validation<R>> start() {
+  Future<Validation> start() {
     return _iHelper.listen()
                   .timeout(_timeout)
                   .catchError((e) {
                       if (e is Exception)
                       {
-                        return e.toInvalid<R>();
+                        return e.toInvalid();
                       } 
                       else if (e is Error)
                       {
-                        return e.toInvalid<R>();
+                        return e.toInvalid();
                       }
                   })                 
                   .then((result) async {
