@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:isolates/isolates.dart';
-import 'package:gl_functional/gl_functional.dart';
+
+import 'package:functional_dart/functional_dart.dart';
 
 String _isolateFunction (IsolateParameter<int> param)
 {

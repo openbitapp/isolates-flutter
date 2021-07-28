@@ -1,4 +1,4 @@
-import 'package:gl_functional/gl_functional.dart';
+import 'package:functional_dart/functional_dart.dart';
 import 'dart:convert';
 import 'package:isolates/src/isolate.dart';
 
