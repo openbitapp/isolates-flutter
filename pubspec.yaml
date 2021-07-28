@@ -16,7 +16,7 @@ dependencies:
   webfeed: ^0.7.0
   http: ^0.13.3
   gl_functional:
-    path: ../gl_functional-flutter
+    path: ../functional-dart
 
 dev_dependencies:
   flutter_test:
