@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:functional_dart/functional_dart.dart';
+import 'package:bitapp_functional_dart/bitapp_functional_dart.dart';
 
 /// Classe da passare nell'isolate come parametro. Se si vogliono passare più parametri è necessario specificare
 /// un `Map` come `T`

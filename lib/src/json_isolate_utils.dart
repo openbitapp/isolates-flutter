@@ -1,6 +1,6 @@
-import 'package:functional_dart/functional_dart.dart';
+import 'package:bitapp_functional_dart/bitapp_functional_dart.dart';
 import 'dart:convert';
-import 'package:isolates/src/isolate.dart';
+import 'package:bitapp_isolates/src/isolate.dart';
 
 dynamic _jsonDecode(IsolateParameter<String> jsonToDecodeIsolateParam)
 {
