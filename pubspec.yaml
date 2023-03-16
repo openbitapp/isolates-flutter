@@ -1,6 +1,6 @@
 name: bitapp_isolates
-description: A new Flutter package project.
-version: 1.0.0
+description: A simple lib to hide flutter isolates boilerplate.
+version: 1.0.1
 repository: https://github.com/openbitapp/isolates-flutter
 
 environment:
@@ -10,7 +10,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  webfeed: ^0.7.0
   http: ^0.13.3
   bitapp_functional_dart: ^1.0.0
 
